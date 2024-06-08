@@ -27,7 +27,8 @@ type Logger struct {
 var logger *Logger
 
 // Init initializes the logger
-func Init(serviceName, logDir string, maxSize int64, maxBackups int) error {
+func Init(serviceName string, maxSize int64, maxBackups int) error {
+	logDir := getDefaultLogDir()
 	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
@@ -54,6 +55,14 @@ func Init(serviceName, logDir string, maxSize int64, maxBackups int) error {
 	logger.currSize = stat.Size()
 
 	return nil
+}
+
+// getDefaultLogDir returns the default log directory based on the operating system
+func getDefaultLogDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("SystemDrive"), "Users", "haven", "log")
+	}
+	return filepath.Join(os.Getenv("HOME"), "haven", "log")
 }
 
 // log logs the message with the specified level
