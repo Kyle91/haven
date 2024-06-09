@@ -17,44 +17,41 @@ import (
 type Logger struct {
 	sync.Mutex
 	file        *os.File
-	serviceName string
 	maxSize     int64
 	maxBackups  int
 	logDir      string
 	currSize    int64
+	serviceName string
 }
 
 var logger *Logger
 
-// Init initializes the logger
-func Init(serviceName string, maxSize int64, maxBackups int) error {
+func init() {
 	logDir := getDefaultLogDir()
 	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
+		panic(fmt.Errorf("failed to create log directory: %w", err))
 	}
 
-	logFile := filepath.Join(logDir, "logfile.log")
+	logFile := filepath.Join(logDir, "haven.log")
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
+		panic(fmt.Errorf("failed to open log file: %w", err))
 	}
 
 	logger = &Logger{
 		file:        file,
-		serviceName: serviceName,
-		maxSize:     maxSize,
-		maxBackups:  maxBackups,
+		maxSize:     100 * 1024 * 1024, // 100 MB
+		maxBackups:  10,
 		logDir:      logDir,
+		serviceName: getServiceName(),
 	}
 
 	// Get the initial size of the log file
 	stat, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("failed to stat log file: %w", err)
+		panic(fmt.Errorf("failed to stat log file: %w", err))
 	}
 	logger.currSize = stat.Size()
-
-	return nil
 }
 
 // getDefaultLogDir returns the default log directory based on the operating system
@@ -63,6 +60,12 @@ func getDefaultLogDir() string {
 		return filepath.Join(os.Getenv("SystemDrive"), "Users", "haven", "log")
 	}
 	return filepath.Join(os.Getenv("HOME"), "haven", "log")
+}
+
+// getServiceName returns the name of the service by using the process name
+func getServiceName() string {
+	parts := strings.Split(os.Args[0], string(os.PathSeparator))
+	return parts[len(parts)-1]
 }
 
 // log logs the message with the specified level
@@ -95,17 +98,20 @@ func (l *Logger) log(level, msg string) {
 func (l *Logger) rotateLogs() {
 	l.file.Close()
 
+	timestamp := time.Now().Format("20060102150405")
 	for i := l.maxBackups - 1; i >= 0; i-- {
-		oldPath := filepath.Join(l.logDir, fmt.Sprintf("logfile.log.%d", i))
-		newPath := filepath.Join(l.logDir, fmt.Sprintf("logfile.log.%d", i+1))
+		oldPath := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%d", i))
+		newPath := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%d", i+1))
 		if _, err := os.Stat(oldPath); err == nil {
 			os.Rename(oldPath, newPath)
 		}
 	}
 
-	os.Rename(filepath.Join(l.logDir, "logfile.log"), filepath.Join(l.logDir, "logfile.log.0"))
+	oldLog := filepath.Join(l.logDir, "haven.log")
+	newLog := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%s.0", timestamp))
+	os.Rename(oldLog, newLog)
 
-	file, err := os.OpenFile(filepath.Join(l.logDir, "logfile.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(oldLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open new log file: %v\n", err)
 		return
@@ -117,7 +123,7 @@ func (l *Logger) rotateLogs() {
 
 // getFuncName returns the name of the function that called the logger
 func getFuncName() string {
-	pc, _, _, ok := runtime.Caller(2)
+	pc, _, _, ok := runtime.Caller(3)
 	if !ok {
 		return "unknown"
 	}
@@ -131,7 +137,7 @@ func getFuncName() string {
 
 // getLine returns the line number where the logger was called
 func getLine() int {
-	_, _, line, ok := runtime.Caller(2)
+	_, _, line, ok := runtime.Caller(3)
 	if !ok {
 		return 0
 	}
