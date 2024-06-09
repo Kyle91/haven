@@ -94,6 +94,11 @@ func (l *Logger) log(level, msg string) {
 	l.currSize += int64(n)
 }
 
+func (l *Logger) logf(level, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	l.log(level, msg)
+}
+
 // rotateLogs rotates the log files
 func (l *Logger) rotateLogs() {
 	l.file.Close()
@@ -164,5 +169,26 @@ func Error(msg string) {
 
 func Fatal(msg string) {
 	logger.log("FATAL", msg)
+	os.Exit(1)
+}
+
+func Debugf(format string, args ...interface{}) {
+	logger.logf("DEBUG", format, args...)
+}
+
+func Infof(format string, args ...interface{}) {
+	logger.logf("INFO", format, args...)
+}
+
+func Warnf(format string, args ...interface{}) {
+	logger.logf("WARN", format, args...)
+}
+
+func Errorf(format string, args ...interface{}) {
+	logger.logf("ERROR", format, args...)
+}
+
+func Fatalf(format string, args ...interface{}) {
+	logger.logf("FATAL", format, args...)
 	os.Exit(1)
 }
