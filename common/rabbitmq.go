@@ -5,15 +5,16 @@ package common
 
 const (
 	ExchangeName     = "haven_topic_exchange"
-	LoginServerQueue = "login_queue_%s"   // 登录服务器队列
-	GatewayQueue     = "gateway_queue_%s" // 网关队列
-	DataServerQueue  = "data_queue_%s"    //数据服务器队列
+	LoginServerQueue = "login_queue"   // 登录服务器队列
+	GatewayQueue     = "gateway_queue" // 网关队列
+	DataServerQueue  = "data_queue"    //数据服务器队列
 )
 
 const (
-	GatewayRoutingKey     = "gateway.%s" // 网关相关消息的路由键
-	LoginServerRoutingKey = "login.%s"   // 登录服务器相关消息的路由键
-	DataServerRoutingKey  = "data.%s"    // 数据服务器相关消息的路由键
+	LoginReqRoutingKey = "login.req.%s" // 发送给登录服务器请求的路由键
+	LoginResRoutingKey = "login.res.%s" // 登录服务器响应的路由键
+	DataReqRoutingKey  = "data.req.%s"  // 发送给数据服务器请求的路由键
+	DataResRoutingKey  = "data.res.%s"  // 数据服务器响应的路由键
 )
 
 // GetQueueName 根据服务名获取队列名
@@ -25,20 +26,6 @@ func GetQueueName(serviceName string) string {
 		return DataServerQueue
 	case "gateway":
 		return GatewayQueue
-	default:
-		return ""
-	}
-}
-
-// GetRoutingKey 根据服务名获取路由键
-func GetRoutingKey(serviceName string) string {
-	switch serviceName {
-	case "login":
-		return LoginServerRoutingKey
-	case "data":
-		return DataServerRoutingKey
-	case "gateway":
-		return GatewayRoutingKey
 	default:
 		return ""
 	}

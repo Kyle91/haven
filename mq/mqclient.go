@@ -92,9 +92,8 @@ func (c *MQClient) ensureQueueAndExchange(exchange, queueName, routingKey string
 //
 //	@Description: 发布数据
 //	@receiver c
-//	@param exchange 交换器名称
 //	@param routingKey 路由键名称
-//	@param queueName 队列名称
+//	@param queueName 队列名称,如果队列不存在，则自动创建
 //	@param message  消息内容
 //	@return error
 func (c *MQClient) Publish(routingKey, queueName string, message []byte) error {
