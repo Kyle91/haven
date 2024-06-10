@@ -4,12 +4,14 @@
 package mq
 
 import (
+	"github.com/Kyle91/haven/common"
 	"github.com/Kyle91/haven/log"
 	"github.com/Kyle91/haven/routine"
 	"github.com/streadway/amqp"
 )
 
-// MQClient 是Client接口的一个简单实现
+// MQClient
+// @Description: RabbitMQ客户端，主题交换器
 type MQClient struct {
 	url  string
 	conn *amqp.Connection
@@ -47,7 +49,7 @@ func (c *MQClient) ensureQueueAndExchange(exchange, queueName, routingKey string
 	// 如果交换器不存在，那就创建一个
 	err = ch.ExchangeDeclare(
 		exchange, // 交换器名称
-		"direct", // 交换器类型
+		"topic",  // 交换器类型
 		true,     // 持久性，true保证RabbitMQ重启后交换器依然存在
 		false,    //自动删除，交换器会在所有绑定的队列都不再绑定时自动删除
 		false,    // 内部。如果设置为true，这个交换器不能被生产者直接发送消息
@@ -95,9 +97,9 @@ func (c *MQClient) ensureQueueAndExchange(exchange, queueName, routingKey string
 //	@param queueName 队列名称
 //	@param message  消息内容
 //	@return error
-func (c *MQClient) Publish(exchange, routingKey, queueName string, message []byte) error {
+func (c *MQClient) Publish(routingKey, queueName string, message []byte) error {
 	// 确保交换器、队列存在
-	err := c.ensureQueueAndExchange(exchange, queueName, routingKey)
+	err := c.ensureQueueAndExchange(common.ExchangeName, queueName, routingKey)
 	if err != nil {
 		return err
 	}
@@ -109,12 +111,12 @@ func (c *MQClient) Publish(exchange, routingKey, queueName string, message []byt
 	defer ch.Close()
 
 	err = ch.Publish(
-		exchange,   // 交换器
-		routingKey, // 路由键
-		false,      // mandatory
-		false,      // immediate
+		common.ExchangeName, // 交换器
+		routingKey,          // 路由键
+		false,               // mandatory
+		false,               // immediate
 		amqp.Publishing{
-			ContentType: "text/plain",
+			ContentType: "application/json",
 			Body:        message,
 		})
 	if err != nil {
@@ -134,9 +136,9 @@ func (c *MQClient) Publish(exchange, routingKey, queueName string, message []byt
 //	@param routingKey 路由键
 //	@param handler
 //	@return error
-func (c *MQClient) Subscribe(exchange, queueName, routingKey string, handler func(amqp.Delivery)) error {
+func (c *MQClient) Subscribe(queueName, routingKey string, handler func(amqp.Delivery)) error {
 	// 确保交换器和路由键存在
-	err := c.ensureQueueAndExchange(exchange, queueName, routingKey)
+	err := c.ensureQueueAndExchange(common.ExchangeName, queueName, routingKey)
 	if err != nil {
 		return err
 	}
