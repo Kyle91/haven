@@ -172,6 +172,7 @@ func Fatal(msg string) {
 	os.Exit(1)
 }
 
+//go:generate stringer -type=Logger
 func Debugf(format string, args ...interface{}) {
 	logger.logf("DEBUG", format, args...)
 }
