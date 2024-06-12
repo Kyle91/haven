@@ -7,12 +7,10 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"io"
 )
 
 const iv = "1234567890123456" // IV should be 16 bytes for AES-256
@@ -50,11 +48,11 @@ func Aes256Encrypt(key, plaintext []byte) (string, error) {
 
 	plaintext = pkcs7Padding(plaintext, block.BlockSize())
 	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
-	iv := ciphertext[:aes.BlockSize]
+	//iv := ciphertext[:aes.BlockSize]
 
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return "", err
-	}
+	//if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+	//	return "", err
+	//}
 
 	mode := cipher.NewCBCEncrypter(block, []byte(iv))
 	mode.CryptBlocks(ciphertext[aes.BlockSize:], plaintext)
@@ -84,7 +82,7 @@ func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
 		return nil, errors.New("ciphertext too short")
 	}
 
-	iv := ciphertextBytes[:aes.BlockSize]
+	//iv := ciphertextBytes[:aes.BlockSize]
 	ciphertextBytes = ciphertextBytes[aes.BlockSize:]
 
 	mode := cipher.NewCBCDecrypter(block, []byte(iv))
