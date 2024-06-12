@@ -57,7 +57,7 @@ func init() {
 // getDefaultLogDir returns the default log directory based on the operating system
 func getDefaultLogDir() string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("SystemDrive"), "Users", "haven", "log")
+		return filepath.Join(os.Getenv("APPDATA"), "haven", "log")
 	}
 	return filepath.Join(os.Getenv("HOME"), "haven", "log")
 }
@@ -172,7 +172,6 @@ func Fatal(msg string) {
 	os.Exit(1)
 }
 
-//go:generate stringer -type=Logger
 func Debugf(format string, args ...interface{}) {
 	logger.logf("DEBUG", format, args...)
 }
