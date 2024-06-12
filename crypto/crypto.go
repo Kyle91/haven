@@ -13,7 +13,7 @@ import (
 	"hash/crc32"
 )
 
-const iv = "1234567890123456" // IV should be 16 bytes for AES-256
+var iv = []byte{1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2} // IV should be 16 bytes for AES-256
 
 func pkcs7Padding(data []byte, blockSize int) []byte {
 	padding := blockSize - len(data)%blockSize
@@ -54,7 +54,7 @@ func Aes256Encrypt(key, plaintext []byte) (string, error) {
 	//	return "", err
 	//}
 
-	mode := cipher.NewCBCEncrypter(block, []byte(iv))
+	mode := cipher.NewCBCEncrypter(block, iv)
 	mode.CryptBlocks(ciphertext[aes.BlockSize:], plaintext)
 
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
@@ -85,7 +85,7 @@ func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
 	//iv := ciphertextBytes[:aes.BlockSize]
 	ciphertextBytes = ciphertextBytes[aes.BlockSize:]
 
-	mode := cipher.NewCBCDecrypter(block, []byte(iv))
+	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(ciphertextBytes, ciphertextBytes)
 
 	return pkcs7Unpadding(ciphertextBytes)
