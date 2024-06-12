@@ -28,7 +28,7 @@ func pkcs7Unpadding(data []byte) ([]byte, error) {
 	}
 	padding := int(data[length-1])
 	if padding > length {
-		return nil, errors.New("invalid padding size")
+		return nil, errors.New("padding > length")
 	}
 	return data[:(length - padding)], nil
 }
