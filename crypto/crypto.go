@@ -13,14 +13,14 @@ import (
 	"hash/crc32"
 )
 
-var iv = []byte{1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2} // IV should be 16 bytes for AES-256
-
+// PKCS7 padding
 func pkcs7Padding(data []byte, blockSize int) []byte {
 	padding := blockSize - len(data)%blockSize
 	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
 	return append(data, padtext...)
 }
 
+// PKCS7 unpadding
 func pkcs7Unpadding(data []byte) ([]byte, error) {
 	length := len(data)
 	if length == 0 {
@@ -35,45 +35,44 @@ func pkcs7Unpadding(data []byte) ([]byte, error) {
 
 // Aes256Encrypt
 //
-//	@Description: AES256加密，CBC模式，PKCS7Padding，iv固定
+//	@Description: AES256加密，CBC模式，PKCS7Padding，iv就是密钥
 //	@param key 加密key
 //	@param plaintext 原始数据
 //	@return string 返回base64之后数据
 //	@return error
-func Aes256Encrypt(key, plaintext []byte) (string, error) {
+func Aes256Encrypt(key []byte, plaintext string) (string, error) {
+	if len(key) != 32 {
+		return "", errors.New("key length must be 32 bytes")
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
 
-	plaintext = pkcs7Padding(plaintext, block.BlockSize())
-	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
-	//iv := ciphertext[:aes.BlockSize]
+	paddedData := pkcs7Padding([]byte(plaintext), aes.BlockSize)
+	ciphertext := make([]byte, len(paddedData))
 
-	//if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-	//	return "", err
-	//}
-
-	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(ciphertext[aes.BlockSize:], plaintext)
+	mode := cipher.NewCBCEncrypter(block, key[:aes.BlockSize])
+	mode.CryptBlocks(ciphertext, paddedData)
 
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
 // Aes256Decrypt
 //
-//	@Description: AES256解密,CBC模式，PKCS7Padding，iv固定
+//	@Description: AES256解密,CBC模式，PKCS7Padding，iv就是密钥
 //	@param key 加密key
 //	@param ciphertext base64的密文
 //	@return []byte 解密后数据
 //	@return error
 func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
+	if len(key) != 32 {
+		return nil, errors.New("key length must be 32 bytes")
+	}
 	ciphertextBytes, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Print(ciphertextBytes)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -84,17 +83,17 @@ func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
 		return nil, errors.New("ciphertext too short")
 	}
 
-	//iv := ciphertextBytes[:aes.BlockSize]
-	ciphertextBytes = ciphertextBytes[aes.BlockSize:]
+	plaintext := make([]byte, len(ciphertextBytes))
 
-	fmt.Print(ciphertextBytes)
+	mode := cipher.NewCBCDecrypter(block, key[:aes.BlockSize])
+	mode.CryptBlocks(plaintext, ciphertextBytes)
 
-	mode := cipher.NewCBCDecrypter(block, iv)
-	mode.CryptBlocks(ciphertextBytes, ciphertextBytes)
+	plaintext, err = pkcs7Unpadding(plaintext)
+	if err != nil {
+		return nil, err
+	}
 
-	fmt.Print(ciphertextBytes)
-
-	return pkcs7Unpadding(ciphertextBytes)
+	return plaintext, nil
 }
 
 // GenerateCRC32
