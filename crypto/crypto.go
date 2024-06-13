@@ -73,6 +73,8 @@ func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
 		return nil, err
 	}
 
+	fmt.Print(ciphertextBytes)
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -85,8 +87,12 @@ func Aes256Decrypt(key []byte, ciphertext string) ([]byte, error) {
 	//iv := ciphertextBytes[:aes.BlockSize]
 	ciphertextBytes = ciphertextBytes[aes.BlockSize:]
 
+	fmt.Print(ciphertextBytes)
+
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(ciphertextBytes, ciphertextBytes)
+
+	fmt.Print(ciphertextBytes)
 
 	return pkcs7Unpadding(ciphertextBytes)
 }
