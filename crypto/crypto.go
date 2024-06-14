@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/md5"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -162,4 +163,15 @@ func Aes256Decrypt(key []byte, cipherBytes []byte) ([]byte, error) {
 //	@return string
 func GenerateCRC32(data []byte) string {
 	return fmt.Sprintf("%08x", crc32.ChecksumIEEE(data))
+}
+
+// MD5
+//
+//	@Description: 生成MD5校验码
+//	@param data
+//	@return string
+func MD5(data []byte) string {
+	hash := md5.New()
+	hash.Write(data)
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
