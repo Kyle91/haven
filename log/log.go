@@ -1,9 +1,10 @@
 // @Author Eric
 // @Date 2024/6/2 17:36:00
-// @Desc 日志库，支持并发，自动轮替
+// @Desc 高性能无锁日志，支持并发，自动轮替，utf-8编码存储
 package log
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,13 +16,15 @@ import (
 
 // Logger struct holds the logger configuration and state
 type Logger struct {
-	sync.Mutex
 	file        *os.File
+	writer      *bufio.Writer
+	logCh       chan string //channel存储数据
 	maxSize     int64
 	maxBackups  int
 	logDir      string
 	currSize    int64
 	serviceName string
+	wg          sync.WaitGroup
 }
 
 var logger *Logger
@@ -38,8 +41,12 @@ func init() {
 		panic(fmt.Errorf("failed to open log file: %w", err))
 	}
 
+	writer := bufio.NewWriter(file)
+
 	logger = &Logger{
 		file:        file,
+		writer:      writer,
+		logCh:       make(chan string, 5000),
 		maxSize:     100 * 1024 * 1024, // 100 MB
 		maxBackups:  10,
 		logDir:      logDir,
@@ -52,6 +59,15 @@ func init() {
 		panic(fmt.Errorf("failed to stat log file: %w", err))
 	}
 	logger.currSize = stat.Size()
+
+	go logger.processLogEntries()
+
+	// 确保异常的情况下也会把日志都写入文件
+	defer func() {
+		if r := recover(); r != nil {
+			logger.flush()
+		}
+	}()
 }
 
 // getDefaultLogDir returns the default log directory based on the operating system
@@ -70,20 +86,51 @@ func getServiceName() string {
 
 // log logs the message with the specified level
 func (l *Logger) log(level, msg string) {
-	l.Lock()
-	defer l.Unlock()
+	// Prepare the log entry
+	entry := fmt.Sprintf("%s [%s] %s %s:%d %s\n",
+		time.Now().Format(time.RFC3339Nano), level, l.serviceName, getFuncName(4), getLine(4), msg)
+
+	// Try to send the log entry to the log channel
+	select {
+	case l.logCh <- entry:
+	default:
+		// If the channel is full, write directly to the file
+		l.writeLogEntry(entry)
+	}
+}
+
+func (l *Logger) logf(level, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	l.log(level, msg)
+}
+
+// processLogEntries processes log entries from the log channel
+func (l *Logger) processLogEntries() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case entry := <-l.logCh:
+			l.writeLogEntry(entry)
+		case <-ticker.C:
+			l.flush()
+		}
+	}
+}
+
+// writeLogEntry writes a log entry to the log file
+func (l *Logger) writeLogEntry(entry string) {
+	l.wg.Add(1)
+	defer l.wg.Done()
 
 	// Check if we need to rotate the log
 	if l.currSize >= l.maxSize {
 		l.rotateLogs()
 	}
 
-	// Prepare the log entry
-	entry := fmt.Sprintf("%s [%s] %s %s:%d %s\n",
-		time.Now().Format(time.RFC3339Nano), level, l.serviceName, getFuncName(), getLine(), msg)
-
 	// Write to the log file
-	n, err := l.file.WriteString(entry)
+	n, err := l.writer.WriteString(entry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to write to log file: %v\n", err)
 	}
@@ -94,13 +141,9 @@ func (l *Logger) log(level, msg string) {
 	l.currSize += int64(n)
 }
 
-func (l *Logger) logf(level, format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	l.log(level, msg)
-}
-
 // rotateLogs rotates the log files
 func (l *Logger) rotateLogs() {
+	l.flush()
 	l.file.Close()
 
 	timestamp := time.Now().Format("20060102150405")
@@ -123,12 +166,19 @@ func (l *Logger) rotateLogs() {
 	}
 
 	l.file = file
+	l.writer = bufio.NewWriter(file)
 	l.currSize = 0
 }
 
+// flush flushes the log writer
+func (l *Logger) flush() {
+	l.wg.Wait()
+	l.writer.Flush()
+}
+
 // getFuncName returns the name of the function that called the logger
-func getFuncName() string {
-	pc, _, _, ok := runtime.Caller(3)
+func getFuncName(depth int) string {
+	pc, _, _, ok := runtime.Caller(depth)
 	if !ok {
 		return "unknown"
 	}
@@ -141,8 +191,8 @@ func getFuncName() string {
 }
 
 // getLine returns the line number where the logger was called
-func getLine() int {
-	_, _, line, ok := runtime.Caller(3)
+func getLine(depth int) int {
+	_, _, line, ok := runtime.Caller(depth)
 	if !ok {
 		return 0
 	}
@@ -169,6 +219,7 @@ func Error(msg string) {
 
 func Fatal(msg string) {
 	logger.log("FATAL", msg)
+	logger.flush()
 	os.Exit(1)
 }
 
@@ -190,5 +241,6 @@ func Errorf(format string, args ...interface{}) {
 
 func Fatalf(format string, args ...interface{}) {
 	logger.logf("FATAL", format, args...)
+	logger.flush()
 	os.Exit(1)
 }
