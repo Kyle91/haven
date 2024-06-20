@@ -18,13 +18,14 @@ import (
 type Logger struct {
 	file        *os.File
 	writer      *bufio.Writer
-	logCh       chan string //channel存储数据
+	logCh       chan string // channel存储数据
 	maxSize     int64
 	maxBackups  int
 	logDir      string
 	currSize    int64
 	serviceName string
 	wg          sync.WaitGroup
+	rotateLock  sync.Mutex
 }
 
 var logger *Logger
@@ -62,7 +63,7 @@ func init() {
 
 	go logger.processLogEntries()
 
-	// 确保异常的情况下也会把日志都写入文件
+	// Ensure logs are written to the file in case of panic
 	defer func() {
 		if r := recover(); r != nil {
 			logger.flush()
@@ -124,10 +125,8 @@ func (l *Logger) writeLogEntry(entry string) {
 	l.wg.Add(1)
 	defer l.wg.Done()
 
-	// Check if we need to rotate the log
-	if l.currSize >= l.maxSize {
-		l.rotateLogs()
-	}
+	// Rotate log if necessary
+	l.checkRotate()
 
 	// Write to the log file
 	n, err := l.writer.WriteString(entry)
@@ -139,6 +138,16 @@ func (l *Logger) writeLogEntry(entry string) {
 	fmt.Print(entry)
 
 	l.currSize += int64(n)
+}
+
+// checkRotate checks if log rotation is needed and performs the rotation if necessary
+func (l *Logger) checkRotate() {
+	l.rotateLock.Lock()
+	defer l.rotateLock.Unlock()
+
+	if l.currSize >= l.maxSize {
+		l.rotateLogs()
+	}
 }
 
 // rotateLogs rotates the log files
