@@ -36,7 +36,7 @@ func init() {
 		panic(fmt.Errorf("failed to create log directory: %w", err))
 	}
 
-	logFile := filepath.Join(logDir, "haven.log")
+	logFile := getLogFileName(logDir)
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(fmt.Errorf("failed to open log file: %w", err))
@@ -62,13 +62,6 @@ func init() {
 	logger.currSize = stat.Size()
 
 	go logger.processLogEntries()
-
-	// Ensure logs are written to the file in case of panic
-	defer func() {
-		if r := recover(); r != nil {
-			logger.flush()
-		}
-	}()
 }
 
 // getDefaultLogDir returns the default log directory based on the operating system
@@ -77,6 +70,12 @@ func getDefaultLogDir() string {
 		return filepath.Join(os.Getenv("APPDATA"), "haven", "log")
 	}
 	return filepath.Join(os.Getenv("HOME"), "haven", "log")
+}
+
+// getLogFileName returns the log file name based on the current date
+func getLogFileName(logDir string) string {
+	dateStr := time.Now().Format("20060102")
+	return filepath.Join(logDir, fmt.Sprintf("haven-%s.log", dateStr))
 }
 
 // getServiceName returns the name of the service by using the process name
@@ -122,11 +121,16 @@ func (l *Logger) processLogEntries() {
 
 // writeLogEntry writes a log entry to the log file
 func (l *Logger) writeLogEntry(entry string) {
+	l.rotateLock.Lock()
+	defer l.rotateLock.Unlock()
+
 	l.wg.Add(1)
 	defer l.wg.Done()
 
-	// Rotate log if necessary
-	l.checkRotate()
+	// Check if we need to rotate the log
+	if l.currSize >= l.maxSize {
+		l.rotateLogs()
+	}
 
 	// Write to the log file
 	n, err := l.writer.WriteString(entry)
@@ -140,43 +144,24 @@ func (l *Logger) writeLogEntry(entry string) {
 	l.currSize += int64(n)
 }
 
-// checkRotate checks if log rotation is needed and performs the rotation if necessary
-func (l *Logger) checkRotate() {
-	l.rotateLock.Lock()
-	defer l.rotateLock.Unlock()
-
-	if l.currSize >= l.maxSize {
-		l.rotateLogs()
-	}
-}
-
 // rotateLogs rotates the log files
 func (l *Logger) rotateLogs() {
 	l.flush()
 	l.file.Close()
 
-	timestamp := time.Now().Format("20060102150405")
-	for i := l.maxBackups - 1; i >= 0; i-- {
-		oldPath := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%d", i))
-		newPath := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%d", i+1))
-		if _, err := os.Stat(oldPath); err == nil {
-			os.Rename(oldPath, newPath)
-		}
-	}
-
-	oldLog := filepath.Join(l.logDir, "haven.log")
-	newLog := filepath.Join(l.logDir, fmt.Sprintf("haven.log.%s.0", timestamp))
-	os.Rename(oldLog, newLog)
-
-	file, err := os.OpenFile(oldLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile := getLogFileName(l.logDir)
+	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open new log file: %v\n", err)
 		return
 	}
 
+	writer := bufio.NewWriter(file)
 	l.file = file
-	l.writer = bufio.NewWriter(file)
+	l.writer = writer
 	l.currSize = 0
+
+	go l.processLogEntries() // 重新启动日志处理协程
 }
 
 // flush flushes the log writer
