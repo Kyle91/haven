@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/Kyle91/haven/crypto"
@@ -13,14 +14,16 @@ import (
 )
 
 type AuthToken struct {
-	SecretKey []byte
+	SecretKey []byte //base64的
 	Salt      string
 }
 
 // 初始化 AuthToken 类
+// secretKey是base64的
 func NewAuthToken(secretKey, salt string) *AuthToken {
+	key, _ := base64.StdEncoding.DecodeString(secretKey)
 	return &AuthToken{
-		SecretKey: []byte(secretKey),
+		SecretKey: key,
 		Salt:      salt,
 	}
 }
