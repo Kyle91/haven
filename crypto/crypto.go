@@ -8,6 +8,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -172,6 +173,17 @@ func GenerateCRC32(data []byte) string {
 //	@return string
 func MD5(data []byte) string {
 	hash := md5.New()
+	hash.Write(data)
+	return fmt.Sprintf("%x", hash.Sum(nil))
+}
+
+// SHA256
+//
+//	@Description: 生成SHA256校验码
+//	@param data
+//	@return string
+func SHA256(data []byte) string {
+	hash := sha256.New()
 	hash.Write(data)
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
