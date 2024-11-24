@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
@@ -186,4 +187,26 @@ func SHA256(data []byte) string {
 	hash := sha256.New()
 	hash.Write(data)
 	return fmt.Sprintf("%x", hash.Sum(nil))
+}
+
+// HMACSHA256
+//
+//	@Description: 生成基于密钥的 HMAC-SHA256 签名
+//	@param key 签名密钥
+//	@param message 签名内容
+//	@return string 返回签名的十六进制字符串
+//	@return error
+func HMACSHA256(key []byte, message string) (string, error) {
+	if len(key) == 0 {
+		return "", errors.New("key must not be empty")
+	}
+
+	mac := hmac.New(sha256.New, key)
+	_, err := mac.Write([]byte(message))
+	if err != nil {
+		return "", err
+	}
+
+	signature := mac.Sum(nil)
+	return fmt.Sprintf("%x", signature), nil
 }
