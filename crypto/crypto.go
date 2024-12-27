@@ -11,9 +11,12 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"math/rand"
+	"time"
 )
 
 // PKCS7 padding
@@ -209,4 +212,169 @@ func HMACSHA256(key []byte, message string) (string, error) {
 
 	signature := mac.Sum(nil)
 	return fmt.Sprintf("%x", signature), nil
+}
+
+func long2str(v []uint64, w bool) string {
+	lenV := len(v)
+	n := (lenV - 1) << 3 // n 是以字节为单位，表示长度
+
+	if w {
+		m := v[lenV-1]
+		if m < uint64(n-7) || m > uint64(n) {
+			return ""
+		}
+		n = int(m)
+	}
+
+	var buf bytes.Buffer
+	for i := 0; i < lenV; i++ {
+		// 将 uint64 数字转换为字节流
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], v[i])
+		buf.Write(b[:])
+	}
+
+	if w {
+		return buf.String()[:n] // 如果 w 为 true，返回前 n 个字节
+	}
+
+	return buf.String()
+}
+
+func str2long(s string, w bool) []uint64 {
+	var v []uint64
+	// Pad string to be a multiple of 8 bytes (64 bits)
+	padded := s + string(make([]byte, (8-len(s)%8)%8))
+	for i := 0; i < len(padded); i += 8 {
+		var n uint64
+		// 将每 8 个字节转为 uint64
+		binary.Read(bytes.NewReader([]byte(padded[i:i+8])), binary.LittleEndian, &n)
+		v = append(v, n)
+	}
+	if w {
+		v = append(v, uint64(len(s)))
+	}
+	return v
+}
+
+func XXTeaEncrypt(str, key string, expiry int) string {
+	if str == "" {
+		return ""
+	}
+	ckeyLength := 8
+	str += random(ckeyLength)
+
+	// Expiry time
+	if expiry != 0 {
+		str = fmt.Sprintf("%010d", expiry+int(time.Now().Unix())) + str
+	} else {
+		str = fmt.Sprintf("%010d", 0) + str
+	}
+
+	v := str2long(str, true)
+	k := str2long(key, false)
+
+	// Ensure key length is at least 4
+	for len(k) < 4 {
+		k = append(k, 0)
+	}
+
+	n := len(v) - 1
+	z := v[n]
+	y := v[0]
+	delta := uint64(0x9E3779B9)
+	q := uint64(6 + 52/(n+1))
+	sum := uint64(0)
+
+	// Start the encryption loop
+	for q > 0 {
+		q--
+		// Update sum, keep it as uint64
+		sum = sum + delta
+		e := sum >> 2 & 3
+		for p := 0; p < n; p++ {
+			y = v[p+1]
+			// Ensure p is uint64 for bitwise operation with e
+			mx := ((z >> 5 & 0x07ffffff) ^ y<<2) + ((y >> 3 & 0x1fffffff) ^ z<<4) ^ (sum ^ y) + (k[p&3^int(e)] ^ z)
+			v[p] = v[p] + mx // First, update v[p]
+			z = v[p]         // Then update z
+		}
+		y = v[0]
+		mx := ((z >> 5 & 0x07ffffff) ^ y<<2) + ((y >> 3 & 0x1fffffff) ^ z<<4) ^ (sum ^ y) + (k[n&3^int(e)] ^ z)
+		v[n] = v[n] + mx // Update v[n]
+		z = v[n]         // Then update z
+	}
+
+	return long2str(v, false)
+}
+
+func XXTeaDecrypt(str, key string) string {
+	if str == "" {
+		return ""
+	}
+	ckeyLength := 8
+
+	v := str2long(str, false)
+	k := str2long(key, false)
+
+	// Ensure key length is at least 4
+	for len(k) < 4 {
+		k = append(k, 0)
+	}
+
+	n := len(v) - 1
+	y := v[0]
+	delta := uint64(0x9E3779B9)
+	q := uint64(6 + 52/(n+1))
+	sum := uint64(q * delta)
+
+	// Decryption loop
+	for sum != 0 {
+		e := sum >> 2 & 3
+		for p := n; p > 0; p-- {
+			z := v[p-1]
+			// Ensure p is uint64 for bitwise operation with e
+			mx := ((z >> 5 & 0x07ffffff) ^ y<<2) + ((y >> 3 & 0x1fffffff) ^ z<<4) ^ (sum ^ y) + (k[p&3^int(e)] ^ z)
+			// Separate assignment to avoid chain assignment
+			v[p] = v[p] - mx
+			y = v[p] // Then update y
+		}
+		z := v[n]
+		mx := ((z >> 5 & 0x07ffffff) ^ y<<2) + ((y >> 3 & 0x1fffffff) ^ z<<4) ^ (sum ^ y) + (k[n&3^int(e)] ^ z)
+		v[0] = v[0] - mx  // Update v[0]
+		y = v[0]          // Then update y
+		sum = sum - delta // Update sum
+	}
+
+	// Convert result to string
+	ret := long2str(v, true)
+	dateLen := len(ret)
+	ret = ret[:dateLen-ckeyLength]
+
+	// Check if the expiry time is valid
+	if ret[:10] == "0000000000" || (time.Now().Unix()-int64(toInt(ret[:10]))) > 0 {
+		ret = ret[10:]
+	} else {
+		ret = ""
+	}
+
+	return ret
+}
+
+func random(length int) string {
+	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
+	var randStr []byte
+	rand.Seed(time.Now().UnixNano())
+	for i := 0; i < length; i++ {
+		randStr = append(randStr, chars[rand.Intn(len(chars))])
+	}
+	return string(randStr)
+}
+
+func toInt(str string) int64 {
+	var result int64
+	for i := 0; i < len(str); i++ {
+		result = result*10 + int64(str[i]-'0')
+	}
+	return result
 }
