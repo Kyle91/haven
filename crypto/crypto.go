@@ -9,6 +9,8 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/md5"
+	cryptoRand "crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -257,6 +259,13 @@ func str2long(s string, w bool) []uint64 {
 	return v
 }
 
+// XXTeaEncrypt
+//
+//	@Description: 带过期时间的加密
+//	@param str
+//	@param key
+//	@param expiry
+//	@return string
 func XXTeaEncrypt(str, key string, expiry int) string {
 	if str == "" {
 		return ""
@@ -308,6 +317,12 @@ func XXTeaEncrypt(str, key string, expiry int) string {
 	return long2str(v, false)
 }
 
+// XXTeaDecrypt
+//
+//	@Description: 带过期时间的解密
+//	@param str
+//	@param key
+//	@return string
 func XXTeaDecrypt(str, key string) string {
 	if str == "" {
 		return ""
@@ -377,4 +392,38 @@ func toInt(str string) int64 {
 		result = result*10 + int64(str[i]-'0')
 	}
 	return result
+}
+
+// RSAEncrypt
+//
+// @Description: RSA公钥加密
+// @param pubKey 公钥
+// @param plaintext 原始数据
+// @return string 返回加密后的数据
+// @return error
+func RSAEncrypt(pubKey *rsa.PublicKey, plaintext []byte) (string, error) {
+	ciphertext, err := rsa.EncryptPKCS1v15(cryptoRand.Reader, pubKey, plaintext)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// RSADecrypt
+//
+// @Description: RSA私钥解密
+// @param privKey 私钥
+// @param ciphertext base64加密的密文
+// @return []byte 返回解密后的数据
+// @return error
+func RSADecrypt(privKey *rsa.PrivateKey, ciphertext string) ([]byte, error) {
+	ciphertextBytes, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	plaintext, err := rsa.DecryptPKCS1v15(cryptoRand.Reader, privKey, ciphertextBytes)
+	if err != nil {
+		return nil, err
+	}
+	return plaintext, nil
 }
