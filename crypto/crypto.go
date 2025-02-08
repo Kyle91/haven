@@ -427,3 +427,57 @@ func RSADecrypt(privKey *rsa.PrivateKey, ciphertext string) ([]byte, error) {
 	}
 	return plaintext, nil
 }
+
+// AesGCMEncrypt
+//
+//	@Description: AES-GCM 加密
+//	@param key 加密key
+//	@param plaintext 原始数据
+//	@return []byte 返回加密后的数据（包括nonce和ciphertext）
+//	@return error
+func AesGCMEncrypt(key []byte, plaintext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := cryptoRand.Read(nonce); err != nil {
+		return nil, err
+	}
+
+	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+	return append(nonce, ciphertext...), nil
+}
+
+// AesGCMDecrypt
+//
+//	@Description: AES-GCM 解密
+//	@param key 加密key
+//	@param ciphertext 密文（包括nonce和ciphertext）
+//	@return []byte 返回解密后的数据
+//	@return error
+func AesGCMDecrypt(key []byte, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
