@@ -5,6 +5,7 @@ package crypto
 
 import (
 	"bytes"
+	"compress/zlib"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -17,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"math/rand"
 	"time"
 )
@@ -480,4 +482,39 @@ func AesGCMDecrypt(key []byte, ciphertext []byte) ([]byte, error) {
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+// GenerateRandomKey
+//
+//	@Description: 生成指定长度的随机密钥，用于加密或签名等场景
+//	@param length 密钥的长度（字节数）
+//	@return []byte 返回生成的随机密钥
+//	@return error 如果生成失败，返回错误
+func GenerateRandomKey(length int) ([]byte, error) {
+	key := make([]byte, length)
+	_, err := cryptoRand.Read(key)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func ZlibCompress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := zlib.NewWriter(&buf)
+	_, err := writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	writer.Close()
+	return buf.Bytes(), nil
+}
+
+func ZlibDecompress(data []byte) ([]byte, error) {
+	reader, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
 }
